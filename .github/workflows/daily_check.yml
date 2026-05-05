@@ -1,0 +1,21 @@
+name: Daily Win Check
+on:
+  schedule:
+    # This runs every day at 8:00 AM UTC (4:00 AM Philly time)
+    - cron: '0 8 * * *'
+  workflow_dispatch: # This adds a button to run it manually anytime
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install requests
+        run: pip install requests
+      - name: Run win tracker
+        run: python main.py
