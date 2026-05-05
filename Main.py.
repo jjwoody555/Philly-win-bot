@@ -2,7 +2,9 @@ import requests
 from datetime import datetime, timedelta
 
 # --- CONFIG ---
-NTFY_TOPIC = "philly-win-alerts-1985" # Change this to your unique ntfy topic
+NTFY_TOPIC = "philly-win-alerts-1985" 
+API_KEY = "123" # Updated to the current free key
+
 TEAMS = {
     "Phillies": "135277",
     "Sixers": "134870",
@@ -11,35 +13,56 @@ TEAMS = {
 }
 
 def check_for_wins():
-    # We check for games from today or yesterday
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
     yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-    
-    for team_name, team_id in TEAMS.items():
-        url = f"https://www.thesportsdb.com/api/v1/json/3/eventslast.php?id={team_id}"
-        data = requests.get(url).json()
-        
-        if not data.get('results'): continue
-        
-        last_game = data['results'][0]
-        game_date = last_game['dateEvent'] # e.g., "2026-05-04"
-        
-        # Only care if it happened in the last 48 hours
-        if game_date in [today, yesterday]:
-            home_score = int(last_game['intHomeScore'] or 0)
-            away_score = int(last_game['intAwayScore'] or 0)
-            
-            # Did our team win?
-            victory = False
-            if team_name in last_game['strHomeTeam'] and home_score > away_score:
-                victory = True
-            elif team_name in last_game['strAwayTeam'] and away_score > home_score:
-                victory = True
-            
-            if victory:
-                msg = f"🏆 {team_name} WIN! Final: {last_game['strHomeTeam']} {home_score} - {last_game['strAwayTeam']} {away_score}"
-                requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=msg.encode('utf-8'))
-                print(f"Sent win alert for {team_name}!")
+    print(f"Checking for games on {today} or {yesterday} (UTC)...")
 
-check_for_wins()
+    for team_name, team_id in TEAMS.items():
+        try:
+            print(f"--- Checking {team_name} ---")
+            url = f"https://www.thesportsdb.com/api/v1/json/{API_KEY}/eventslast.php?id={team_id}"
+            response = requests.get(url)
+            
+            if response.status_code != 200:
+                print(f"Error: API returned status {response.status_code}")
+                continue
+                
+            data = response.json()
+            
+            if not data or 'results' not in data or data['results'] is None:
+                print(f"No recent game data found for {team_name}.")
+                continue
+            
+            last_game = data['results'][0]
+            game_date = last_game.get('dateEvent')
+            print(f"Last game found was on {game_date}")
+            
+            if game_date in [today, yesterday]:
+                home_team = last_game.get('strHomeTeam', 'Unknown')
+                away_team = last_game.get('strAwayTeam', 'Unknown')
+                
+                # Convert scores to numbers, defaulting to 0 if missing
+                h_score = int(last_game.get('intHomeScore') or 0)
+                a_score = int(last_game.get('intAwayScore') or 0)
+                
+                victory = False
+                if team_name in home_team and h_score > a_score:
+                    victory = True
+                elif team_name in away_team and a_score > h_score:
+                    victory = True
+                
+                if victory:
+                    msg = f"🏆 {team_name} WIN! Final: {home_team} {h_score} - {away_team} {a_score}"
+                    requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=msg.encode('utf-8'))
+                    print(f"✅ Notification sent for {team_name}!")
+                else:
+                    print(f"No win for {team_name} (Score: {h_score}-{a_score})")
+            else:
+                print(f"Game on {game_date} is too old. Skipping.")
+
+        except Exception as e:
+            print(f"❌ Error checking {team_name}: {e}")
+
+if __name__ == "__main__":
+    check_for_wins()
