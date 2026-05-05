@@ -1,0 +1,45 @@
+import requests
+from datetime import datetime, timedelta
+
+# --- CONFIG ---
+NTFY_TOPIC = "philly-win-alerts-1985" # Change this to your unique ntfy topic
+TEAMS = {
+    "Phillies": "135277",
+    "Sixers": "134870",
+    "Flyers": "134833",
+    "Eagles": "134937"
+}
+
+def check_for_wins():
+    # We check for games from today or yesterday
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    for team_name, team_id in TEAMS.items():
+        url = f"https://www.thesportsdb.com/api/v1/json/3/eventslast.php?id={team_id}"
+        data = requests.get(url).json()
+        
+        if not data.get('results'): continue
+        
+        last_game = data['results'][0]
+        game_date = last_game['dateEvent'] # e.g., "2026-05-04"
+        
+        # Only care if it happened in the last 48 hours
+        if game_date in [today, yesterday]:
+            home_score = int(last_game['intHomeScore'] or 0)
+            away_score = int(last_game['intAwayScore'] or 0)
+            
+            # Did our team win?
+            victory = False
+            if team_name in last_game['strHomeTeam'] and home_score > away_score:
+                victory = True
+            elif team_name in last_game['strAwayTeam'] and away_score > home_score:
+                victory = True
+            
+            if victory:
+                msg = f"🏆 {team_name} WIN! Final: {last_game['strHomeTeam']} {home_score} - {last_game['strAwayTeam']} {away_score}"
+                requests.post(f"https://ntfy.sh/{NTFY_TOPIC}", data=msg.encode('utf-8'))
+                print(f"Sent win alert for {team_name}!")
+
+check_for_wins()
